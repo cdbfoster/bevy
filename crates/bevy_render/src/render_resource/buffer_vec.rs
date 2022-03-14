@@ -3,14 +3,15 @@ use crate::{
     renderer::{RenderDevice, RenderQueue},
 };
 use bevy_core::{cast_slice, Pod};
-use copyless::VecHelper;
+use std::ops::{Deref, DerefMut};
 use wgpu::BufferUsages;
 
+/// A user-friendly wrapper around a [`Buffer`] that provides a `Vec`-like
+/// interface for constructing the buffer.
 pub struct BufferVec<T: Pod> {
     values: Vec<T>,
     buffer: Option<Buffer>,
     capacity: usize,
-    item_size: usize,
     buffer_usage: BufferUsages,
 }
 
@@ -21,12 +22,14 @@ impl<T: Pod> Default for BufferVec<T> {
             buffer: None,
             capacity: 0,
             buffer_usage: BufferUsages::all(),
-            item_size: std::mem::size_of::<T>(),
         }
     }
 }
 
 impl<T: Pod> BufferVec<T> {
+    /// Creates a new [`BufferVec`] with the associated [`BufferUsages`].
+    ///
+    /// This does not immediately allocate a system/video RAM buffers.
     pub fn new(buffer_usage: BufferUsages) -> Self {
         Self {
             buffer_usage,
@@ -34,58 +37,67 @@ impl<T: Pod> BufferVec<T> {
         }
     }
 
+    /// Gets the reference to the underlying buffer, if one has been allocated.
     #[inline]
     pub fn buffer(&self) -> Option<&Buffer> {
         self.buffer.as_ref()
     }
 
-    #[inline]
-    pub fn capacity(&self) -> usize {
-        self.capacity
+    /// Queues up a copy of the contents of the [`BufferVec`] into the underlying
+    /// buffer.
+    ///
+    /// If no buffer has been allocated yet or if the current size of the contents
+    /// exceeds the size of the underlying buffer, a new buffer will be allocated.
+    pub fn write_buffer(&mut self, device: &RenderDevice, queue: &RenderQueue) {
+        if self.values.is_empty() {
+            return;
+        }
+        self.reserve_buffer(self.values.len(), device);
+        if let Some(buffer) = &self.buffer {
+            let range = 0..self.size();
+            let bytes: &[u8] = cast_slice(&self.values);
+            queue.write_buffer(buffer, 0, &bytes[range]);
+        }
     }
 
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.values.len()
+    /// Consumes the [`BufferVec`] and returns the underlying [`Vec`].
+    /// If a buffer was allocated, it will be dropped.
+    pub fn take_vec(self) -> Vec<T> {
+        self.values
     }
 
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.values.is_empty()
+    /// Consumes the [`BufferVec`] and returns the underlying [`Buffer`]
+    /// if one was allocated.
+    pub fn take_buffer(self) -> Option<Buffer> {
+        self.buffer
     }
 
-    pub fn push(&mut self, value: T) -> usize {
-        let index = self.values.len();
-        self.values.alloc().init(value);
-        index
-    }
-
-    pub fn reserve(&mut self, capacity: usize, device: &RenderDevice) {
+    fn reserve_buffer(&mut self, capacity: usize, device: &RenderDevice) {
         if capacity > self.capacity {
             self.capacity = capacity;
-            let size = self.item_size * capacity;
             self.buffer = Some(device.create_buffer(&wgpu::BufferDescriptor {
                 label: None,
-                size: size as wgpu::BufferAddress,
+                size: self.size() as wgpu::BufferAddress,
                 usage: BufferUsages::COPY_DST | self.buffer_usage,
                 mapped_at_creation: false,
             }));
         }
     }
 
-    pub fn write_buffer(&mut self, device: &RenderDevice, queue: &RenderQueue) {
-        if self.values.is_empty() {
-            return;
-        }
-        self.reserve(self.values.len(), device);
-        if let Some(buffer) = &self.buffer {
-            let range = 0..self.item_size * self.values.len();
-            let bytes: &[u8] = cast_slice(&self.values);
-            queue.write_buffer(buffer, 0, &bytes[range]);
-        }
+    fn size(&self) -> usize {
+        std::mem::size_of::<T>() * self.values.len()
     }
+}
 
-    pub fn clear(&mut self) {
-        self.values.clear();
+impl<T: Pod> Deref for BufferVec<T> {
+    type Target = Vec<T>;
+    fn deref(&self) -> &Self::Target {
+        &self.values
+    }
+}
+
+impl<T: Pod> DerefMut for BufferVec<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.values
     }
 }

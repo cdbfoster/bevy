@@ -877,7 +877,7 @@ pub fn prepare_lights(
                 lights: view_lights,
             },
             ViewLightsUniformOffset {
-                offset: light_meta.view_gpu_lights.push(gpu_lights),
+                offset: light_meta.view_gpu_lights.push_and_get_offset(gpu_lights),
             },
         ));
     }
@@ -946,7 +946,7 @@ impl ViewClusterBindings {
         let component = self.n_offsets & ((1 << 2) - 1);
         let packed = pack_offset_and_count(offset, count);
 
-        self.cluster_offsets_and_counts.get_mut(0)[array_index][component] = packed;
+        self.cluster_offsets_and_counts[0][array_index][component] = packed;
 
         self.n_offsets += 1;
     }
@@ -961,8 +961,7 @@ impl ViewClusterBindings {
         let sub_index = self.n_indices & ((1 << 2) - 1);
         let index = index as u32 & POINT_LIGHT_INDEX_MASK;
 
-        self.cluster_light_index_lists.get_mut(0)[array_index][component] |=
-            index << (8 * sub_index);
+        self.cluster_light_index_lists[0][array_index][component] |= index << (8 * sub_index);
 
         self.n_indices += 1;
     }
