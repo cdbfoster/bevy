@@ -60,7 +60,10 @@ impl<A: RenderAsset> Plugin for RenderAssetPlugin<A> {
                 .init_resource::<RenderAssets<A>>()
                 .init_resource::<PrepareNextFrameAssets<A>>()
                 .add_system_to_stage(RenderStage::Extract, extract_render_asset::<A>)
-                .add_system_to_stage(RenderStage::Prepare, prepare_assets::<A>);
+                .add_system_to_stage(
+                    RenderStage::Prepare,
+                    prepare_assets::<A>.label("prepare_assets"),
+                );
         }
     }
 }

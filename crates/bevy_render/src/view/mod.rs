@@ -35,7 +35,9 @@ impl Plugin for ViewPlugin {
                 .add_system_to_stage(RenderStage::Prepare, prepare_view_uniforms)
                 .add_system_to_stage(
                     RenderStage::Prepare,
-                    prepare_view_targets.after(WindowSystem::Prepare),
+                    prepare_view_targets
+                        .after(WindowSystem::Prepare)
+                        .after("prepare_assets"),
                 );
         }
     }
